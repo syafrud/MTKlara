@@ -3,9 +3,8 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\URL;
 
-class SurveyResource extends JsonResource
+class SurveyQuestionResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -17,13 +16,10 @@ class SurveyResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'title' => $this->title,
-            'slug' => $this->slug,
-            'video_url' => $this->video ? URL::to($this->video) : null,
+            'type' => $this->type,
+            'question' => $this->question,
             'description' => $this->description,
-            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
-            'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),
-            'questions' => SurveyQuestionResource::collection($this->questions)
+            'data' => json_decode($this->data),
         ];
     }
 }
