@@ -17,10 +17,17 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->group(function(){
+Route::middleware('auth:sanctum')->group(function() {
     Route::post('/logout',[AuthController::class,'logout']);
     Route::get('/me',[AuthController::class,'me']);
     Route::apiResource('survey',SurveyController::class);
+    Route::post('/survey/{survey}/answer',[SurveyController::class,'storeAnswer']);
+    Route::get('/survey/pertanyaan/{survey:slug}', [SurveyController::class, 'getByPertanyaan']);
+    Route::get('/survey/jawaban/{survey:slug}', [SurveyController::class, 'getByJawaban']);
+    Route::get('/view/{id}', [SurveyController::class, 'getSurveyHistory']);
+    Route::get('/answer/{slug}', [DashboardController::class, 'index']);
+    Route::get('/show', [DashboardController::class, 'show']);
+    Route::get('/history/{slug}', [DashboardController::class, 'history']);
 });
 
 Route::post('/signup',[AuthController::class,'signup']);

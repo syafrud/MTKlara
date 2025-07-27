@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Enums\QuestionTypeEnum;
 use App\Http\Requests\StoreSurveyAnswerRequest;
 use App\Http\Resources\SurveyResource;
+use App\Http\Resources\SurveyAnswerResource;
+use App\Http\Resources\SurveyQuestionAnswersResource;
+// use App\Http\Resources\SurveyQuestionAnswerResource;
 use App\Models\Survey;
 use App\Http\Requests\StoreSurveyRequest;
 use App\Http\Requests\UpdateSurveyRequest;
 use App\Models\SurveyAnswer;
 use App\Models\SurveyQuestion;
-use App\Models\SurveyQuestionAnswer;
+use App\Models\SurveyQuestionAnswers;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
@@ -28,13 +31,12 @@ class SurveyController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
+        $surveys = Survey::query()
+            ->orderByRaw('CAST(grade AS UNSIGNED) ASC')
+            ->orderBy('title', 'asc')
+            ->paginate(6);
 
-        return SurveyResource::collection(
-            Survey::where('user_id', $user->id)
-                ->orderBy('created_at', 'desc')
-                ->paginate(2)
-        );
+        return SurveyResource::collection($surveys);
     }
 
     /**
@@ -53,6 +55,11 @@ class SurveyController extends Controller
             $data['video'] = $relativePath;
         }
 
+        if (isset($data['image'])) {
+            $relativePathi = $this->saveImage($data['image']);
+            $data['image'] = $relativePathi;
+        }
+
         $survey = Survey::create($data);
 
         // Create new questions
@@ -61,7 +68,7 @@ class SurveyController extends Controller
             $this->createQuestion($question);
         }
 
-        return new SurveyResource($survey);
+        return new SurveyResource($survey, false);
     }
 
     /**
@@ -72,11 +79,7 @@ class SurveyController extends Controller
      */
     public function show(Survey $survey, Request $request)
     {
-        $user = $request->user();
-        if ($user->id !== $survey->user_id) {
-            return abort(403, 'Unauthorized action');
-        }
-        return new SurveyResource($survey);
+        return new SurveyResource($survey, false);
     }
 
     /**
@@ -98,6 +101,17 @@ class SurveyController extends Controller
             // If there is an old video, delete it
             if ($survey->video) {
                 $absolutePath = public_path($survey->video);
+                File::delete($absolutePath);
+            }
+        }
+
+        if (isset($data['image'])) {
+            $relativePathi = $this->saveImage($data['image']);
+            $data['image'] = $relativePathi;
+
+            // If there is an old image, delete it
+            if ($survey->image) {
+                $absolutePath = public_path($survey->image);
                 File::delete($absolutePath);
             }
         }
@@ -133,7 +147,7 @@ class SurveyController extends Controller
             }
         }
 
-        return new SurveyResource($survey);
+        return new SurveyResource($survey, false);
     }
 
     /**
@@ -144,10 +158,7 @@ class SurveyController extends Controller
      */
     public function destroy(Survey $survey, Request $request)
     {
-        $user = $request->user();
-        if ($user->id !== $survey->user_id) {
-            return abort(403, 'Unauthorized action.');
-        }
+
 
         $survey->delete();
 
@@ -178,7 +189,7 @@ class SurveyController extends Controller
             $type = strtolower($type[1]); // jpg, png, gif
 
             // Check if file is an video
-            if (!in_array($type, ['mp4', 'ogx', 'oga', 'ogv','ogg','webm'])) {
+            if (!in_array($type, ['mp4', 'ogx', 'oga', 'ogv', 'ogg', 'webm'])) {
                 throw new \Exception('invalid video type');
             }
             $video = str_replace(' ', '+', $video);
@@ -203,6 +214,41 @@ class SurveyController extends Controller
         return $relativePath;
     }
 
+    private function saveImage($image)
+    {
+        // Check if image is valid base64 string
+        if (preg_match('/^data:image\/(\w+);base64,/', $image, $type)) {
+            // Take out the base64 encoded text without mime type
+            $image = substr($image, strpos($image, ',') + 1);
+            // Get file extension
+            $type = strtolower($type[1]); // jpg, png, gif
+
+            // Check if file is an image
+            if (!in_array($type, ['jpg', 'jpeg', 'gif', 'png'])) {
+                throw new \Exception('invalid image type');
+            }
+            $image = str_replace(' ', '+', $image);
+            $image = base64_decode($image);
+
+            if ($image === false) {
+                throw new \Exception('base64_decode failed');
+            }
+        } else {
+            throw new \Exception('did not match data URI with image data');
+        }
+
+        $dir = 'images/';
+        $file = Str::random() . '.' . $type;
+        $absolutePath = public_path($dir);
+        $relativePathi = $dir . $file;
+        if (!File::exists($absolutePath)) {
+            File::makeDirectory($absolutePath, 0755, true);
+        }
+        file_put_contents($relativePathi, $image);
+
+        return $relativePathi;
+    }
+
     /**
      * Create a question and return
      *
@@ -219,7 +265,8 @@ class SurveyController extends Controller
         $validator = Validator::make($data, [
             'question' => 'required|string',
             'type' => [
-                'required', new Enum(QuestionTypeEnum::class)
+                'required',
+                new Enum(QuestionTypeEnum::class)
             ],
             'description' => 'nullable|string',
             'data' => 'present',
@@ -240,16 +287,84 @@ class SurveyController extends Controller
      */
     private function updateQuestion(SurveyQuestion $question, $data)
     {
+        if (is_array($data['data'])) {
+            $data['data'] = json_encode($data['data']);
+        }
+        $validator = Validator::make($data, [
+            'id' => 'exists:App\Models\SurveyQuestion,id',
+            'question' => 'required|string',
+            'type' => ['required', new Enum(QuestionTypeEnum::class)],
+            'description' => 'nullable|string',
+            'data' => 'present',
+        ]);
 
+        return $question->update($validator->validated());
     }
 
-    public function getBySlug(Survey $survey)
+    public function getByPertanyaan(Survey $survey)
     {
+        return new SurveyResource($survey, true);
+    }
+    public function getByJawaban(Survey $survey)
+    {
+        return new SurveyResource($survey, false);
+    }
 
+    public function getSurveyHistory(Request $request, $id)
+    {
+        $userId = $request->user()->id;
+
+        $surveyAnswer = SurveyAnswer::with('surveyQuestionAnswers')
+            ->where('id', $id)
+            ->firstOrFail();
+
+        if ($surveyAnswer->user_id !== $userId) {
+            return response()->json([
+                'message' => 'Unauthorized access to survey history.'
+            ], 403);
+        }
+
+        return new SurveyAnswerResource($surveyAnswer);
     }
 
     public function storeAnswer(StoreSurveyAnswerRequest $request, Survey $survey)
     {
+        try {
+            $validated = $request->validated();
+            $correctAnswers = $validated['answers']['correctAnswers'] ?? 0;
+            $userId = $request->user()->id;
 
+            $surveyAnswer = SurveyAnswer::create([
+                'user_id' => $userId,
+                'survey_id' => $survey->id,
+                'start_date' => date('Y-m-d H:i:s'),
+                'end_date' => date('Y-m-d H:i:s'),
+                'correctAnswers' => $correctAnswers,
+            ]);
+
+            foreach ($validated['answers'] as $questionId => $answer) {
+                if ($questionId === 'correctAnswers') {
+                    continue; // Skip the "correctAnswers" key
+                }
+
+                $question = SurveyQuestion::where(['id' => $questionId, 'survey_id' => $survey->id])->first();
+                if (!$question) {
+                    return response("Invalid question ID: $questionId", 400);
+                }
+
+                $data = [
+                    'survey_question_id' => $questionId,
+                    'survey_answer_id' => $surveyAnswer->id,
+                    'answer' => is_array($answer) ? json_encode($answer) : $answer,
+                ];
+                $questionAnswer = SurveyQuestionAnswers::create($data);
+            }
+
+            return response("", 201);
+        } catch (Exception $e) {
+            Log::error($e->getMessage());
+            Log::error($e->getTraceAsString());
+            return response("Internal server error", 500);
+        }
     }
 }

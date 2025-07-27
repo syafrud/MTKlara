@@ -17,7 +17,8 @@ return new class extends Migration
             $table->string('question',2000);
             $table->longText('description')->nullable();
             $table->longText('data')->nullable();
-            $table->foreignIdFor(\App\Models\Survey::class, 'survey_id');
+            $table->unsignedBigInteger('survey_id');
+            $table->foreign('survey_id')->references('id')->on('surveys');
             $table->timestamps();
         });
     }

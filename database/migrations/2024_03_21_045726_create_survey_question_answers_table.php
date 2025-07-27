@@ -13,8 +13,10 @@ return new class extends Migration
     {
         Schema::create('survey_question_answers', function (Blueprint $table) {
             $table->id();
-            $table->foreignIdFor(\App\Models\SurveyQuestion::class, 'survey_question_id');
-            $table->foreignIdFor(\App\Models\SurveyAnswer::class, 'survey_answer_id');
+            $table->unsignedBigInteger('survey_question_id');
+            $table->foreign('survey_question_id')->references('id')->on('survey_questions');
+            $table->unsignedBigInteger('survey_answer_id');
+            $table->foreign('survey_answer_id')->references('id')->on('survey_answers');
             $table->text('answer');
             $table->timestamps();
         });

@@ -12,7 +12,7 @@ class Survey extends Model
     use HasFactory;
     use HasSlug;
 
-    protected $fillable = ['title', 'description', 'video', 'user_id',  'created_at', 'updated_at'];
+    protected $fillable = ['title', 'description', 'video','image','grade','question_length', 'created_at', 'updated_at'];
 
     /**
      * Get the options for generating the slug.

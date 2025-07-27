@@ -32,9 +32,12 @@ class StoreSurveyRequest extends FormRequest
     {
         return [
             'title' => 'required|string|max:1000',
+            'grade' => 'required|string',
             'video' => 'required|string',
+            'image' => 'required|string',
             'user_id' => 'exists:users,id',
             'description' => 'nullable|string',
+            'question_length' => 'required|integer',
             'questions' => 'array',
         ];
     }
